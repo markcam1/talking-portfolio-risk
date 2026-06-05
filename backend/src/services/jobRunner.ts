@@ -7,6 +7,7 @@ import { dispatch } from './callAgentClient.js';
 import { initDir, writeFile, appendEvent } from './complianceDir.js';
 import { policyRegistry } from '../policies/registry.js';
 import { ownedNumbersGuard } from '../policies/checks/ownedNumbersGuard.js';
+import { broadcastToJob } from '../ws/jobSocket.js';
 import type { Disclosures } from '../policies/types.js';
 import type { Job, CallerProfile, Contact, Portfolio } from '@prisma/client';
 
@@ -40,6 +41,11 @@ export async function enqueueJob(jobId: string, opts?: { resumeFromApproval?: bo
 async function transition(jobId: string, status: string, extra?: Record<string, unknown>): Promise<void> {
   await db.job.update({ where: { id: jobId }, data: { status, ...(extra as object) } });
   appendEvent(jobId, { type: 'transition', status, ...extra });
+  broadcastToJob(jobId, { event: 'status', status, ...extra });
+}
+
+async function resolveProfile(job: FullJob): Promise<CallerProfile | null> {
+  return job.callerProfile ?? await db.callerProfile.findFirst({ where: { isDefault: true } }) ?? null;
 }
 
 async function runJob(job: FullJob, opts?: { resumeFromApproval?: boolean }): Promise<void> {
@@ -78,7 +84,8 @@ async function runJob(job: FullJob, opts?: { resumeFromApproval?: boolean }): Pr
     // Step 4: Policy evaluate
     const policy = policyRegistry.get(job.policyId);
     const contact = job.contact ?? await db.contact.findUnique({ where: { id: job.contactId ?? '' } });
-    const gateResult = await policy.evaluate({ job, contact, phone: job.phoneE164, now: new Date() });
+    const callerProfile = await resolveProfile(job);
+    const gateResult = await policy.evaluate({ job, contact, callerProfile, phone: job.phoneE164, now: new Date() });
 
     appendEvent(job.id, { type: 'gate_evaluated', allow: gateResult.allow, reason: gateResult.reason });
 
@@ -95,7 +102,7 @@ async function runJob(job: FullJob, opts?: { resumeFromApproval?: boolean }): Pr
 
     await transition(job.id, 'gated');
     const packData = JSON.parse(fs.readFileSync(path.join(dir, 'report_pack.json'), 'utf8')) as Record<string, unknown>;
-    await dispatchCall(job, packData, gateResult.disclosures);
+    await dispatchCall(job, packData, gateResult.disclosures, callerProfile);
   } else {
     // Resumed from approval
     await transition(job.id, 'gated');
@@ -105,15 +112,19 @@ async function runJob(job: FullJob, opts?: { resumeFromApproval?: boolean }): Pr
 
     const policy = policyRegistry.get(job.policyId);
     const contact = job.contact ?? await db.contact.findUnique({ where: { id: job.contactId ?? '' } });
-    const gateResult = await policy.evaluate({ job, contact, phone: job.phoneE164, now: new Date() });
-    await dispatchCall(job, packData, gateResult.disclosures);
+    const callerProfile = await resolveProfile(job);
+    const gateResult = await policy.evaluate({ job, contact, callerProfile, phone: job.phoneE164, now: new Date() });
+    await dispatchCall(job, packData, gateResult.disclosures, callerProfile);
   }
 }
 
-async function dispatchCall(job: FullJob, pack: Record<string, unknown>, disclosures: Disclosures): Promise<void> {
-  const profile = job.callerProfile ?? await db.callerProfile.findFirst({ where: { isDefault: true } });
+async function dispatchCall(
+  job: FullJob,
+  pack: Record<string, unknown>,
+  disclosures: Disclosures,
+  profile: CallerProfile | null,
+): Promise<void> {
   const entityName = profile?.entityName ?? config.DEFAULT_ENTITY_NAME;
-  const callbackNumber = profile?.callbackNumber ?? config.DEFAULT_CALLBACK_NUMBER;
 
   const headline = (pack.headline as Record<string, unknown>) ?? {};
   const objectivePlain = (headline.objective_plain as string) ?? 'portfolio optimization';
@@ -137,7 +148,7 @@ async function dispatchCall(job: FullJob, pack: Record<string, unknown>, disclos
     disclosures: {
       ai_identity: disclosures.ai_identity,
       purpose: disclosures.purpose,
-      callback_number: callbackNumber,
+      callback_number: disclosures.callback_number,
       financial_disclaimer: disclosures.financial_disclaimer,
       recording_notice: disclosures.recording_notice,
       require_recording_consent: disclosures.require_recording_consent,

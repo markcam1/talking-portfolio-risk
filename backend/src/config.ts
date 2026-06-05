@@ -25,6 +25,7 @@ const schema = z.object({
   COMPLIANCE_BCC: z.string().default(''),
   DEFAULT_ENTITY_NAME: z.string().default('Your Name'),
   DEFAULT_CALLBACK_NUMBER: z.string().default('+15550001234'),
+  MOCK_CALL_TARGET: z.string().optional(),
   APPROVAL_REQUIRED: z.string().transform(v => v === 'true').default('false'),
   EVENT_TRIGGERS_ENABLED: z.string().transform(v => v === 'true').default('false'),
   INBOUND_ENABLED: z.string().transform(v => v === 'true').default('false'),

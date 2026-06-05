@@ -27,3 +27,7 @@ backend/node_modules/.prisma/
 .DS_Store
 .vscode/settings.json
 *.swp
+
+# Internal planning docs — not for public repo
+PLAN.md
+talking-portfolio-spec.md

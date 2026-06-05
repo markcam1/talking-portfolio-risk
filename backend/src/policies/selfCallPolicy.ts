@@ -26,13 +26,14 @@ export const selfCallPolicy: RecipientPolicy = {
   },
 
   buildDisclosures(ctx: CallContext): Disclosures {
-    const entityName = config.DEFAULT_ENTITY_NAME;
-    const callbackNumber = config.DEFAULT_CALLBACK_NUMBER;
+    const entityName = ctx.callerProfile?.entityName ?? config.DEFAULT_ENTITY_NAME;
+    const callbackNumber = ctx.callerProfile?.callbackNumber ?? config.DEFAULT_CALLBACK_NUMBER;
+    const financialDisclaimer = ctx.callerProfile?.financialDisclaimer ?? 'Educational use only. Not investment advice.';
     return {
       ai_identity: `I am an AI voice assistant calling on behalf of ${entityName}. I am not a human.`,
       purpose: 'I am calling to discuss your portfolio optimization report.',
       callback_number: callbackNumber,
-      financial_disclaimer: 'This call is for educational purposes only and does not constitute investment advice.',
+      financial_disclaimer: financialDisclaimer,
       recording_notice: 'This call may be recorded for quality and compliance purposes.',
       require_recording_consent: false,
     };

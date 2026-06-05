@@ -18,12 +18,15 @@ export const managedClientPolicy: RecipientPolicy = {
     };
   },
 
-  buildDisclosures(_ctx: CallContext): Disclosures {
+  buildDisclosures(ctx: CallContext): Disclosures {
+    const entityName = ctx.callerProfile?.entityName ?? 'our firm';
+    const callbackNumber = ctx.callerProfile?.callbackNumber ?? '';
+    const financialDisclaimer = ctx.callerProfile?.financialDisclaimer ?? 'Educational use only. Not investment advice.';
     return {
-      ai_identity: 'I am an AI voice assistant. I am not a human.',
+      ai_identity: `I am an AI voice assistant calling on behalf of ${entityName}. I am not a human.`,
       purpose: 'I am calling to discuss your portfolio optimization report.',
-      callback_number: '',
-      financial_disclaimer: 'Educational use only. Not investment advice.',
+      callback_number: callbackNumber,
+      financial_disclaimer: financialDisclaimer,
       recording_notice: 'This call may be recorded. Do you consent to being recorded?',
       require_recording_consent: true,
     };

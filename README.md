@@ -45,7 +45,7 @@ Three repos work together:
 |---|---|---|
 | P1 | Optimizer headless mode + `/api/talking/run` + `/api/talking/pack` | ✅ Done |
 | P2 | Orchestrator scaffold — Express, Prisma, registries, compliance dir, web UI | ✅ Done |
-| P3 | Policy framework wired end-to-end, SelfCallPolicy, owned-numbers guard tested | 🔧 In progress |
+| P3 | Policy framework wired end-to-end, SelfCallPolicy + CallerProfile disclosures, owned-numbers guard, WS broadcasts | ✅ Done |
 | P4 | Call agent `/api/talking-call/dispatch`, grounded prompt, transcript relay | 🔧 Next |
 | P5 | News lookup (Brave) | Planned |
 | P6 | Constrained rerun + `send_report` delivery | Planned |

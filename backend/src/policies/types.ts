@@ -1,8 +1,9 @@
-import type { Job, Contact } from '@prisma/client';
+import type { Job, Contact, CallerProfile } from '@prisma/client';
 
 export interface CallContext {
   job: Job;
   contact: Contact | null;
+  callerProfile: CallerProfile | null;
   phone: string;
   now: Date;
 }
