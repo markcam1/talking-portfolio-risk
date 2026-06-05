@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Portfolio {
+  id               String   @id @default(uuid())
+  name             String
+  tickers          String   // JSON array of ticker strings
+  config           String   // JSON optimization config
+  dateRange        String   // JSON { start, end }
+  optimizerRunRef  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  jobs             Job[]
+}
+
+model Contact {
+  id           String    @id @default(uuid())
+  name         String
+  phoneNumbers String    // JSON array of { phone_e164, label, is_primary, is_owned }
+  timezone     String    @default("America/New_York")
+  policyId     String    @default("self")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  consents     Consent[]
+  jobs         Job[]
+}
+
+model Consent {
+  id                String   @id @default(uuid())
+  contactId         String
+  status            String   @default("none") // granted | revoked | none
+  method            String   @default("self_owned") // self_owned | web_form | recorded_verbal | written | imported
+  scope             String   @default("automated_ai_voice_calls_about_their_portfolio")
+  grantedAt         DateTime?
+  expiresAt         DateTime?
+  evidenceUri       String?
+  capturedBy        String?
+  recordingConsent  String   @default("unknown") // granted | denied | unknown
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  contact           Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+}
+
+model CallerProfile {
+  id                  String   @id @default(uuid())
+  entityName          String
+  callbackNumber      String
+  voicePersona        String?
+  financialDisclaimer String   @default("Educational use only. Not investment advice.")
+  isDefault           Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  jobs                Job[]
+}
+
+model OwnedNumber {
+  id                 String    @id @default(uuid())
+  phoneE164          String    @unique
+  label              String?
+  verified           Boolean   @default(false)
+  verificationMethod String    @default("manual_confirm")
+  verifiedAt         DateTime?
+  addedBy            String    @default("operator")
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model DncEntry {
+  id        String   @id @default(uuid())
+  phoneE164 String   @unique
+  addedAt   DateTime @default(now())
+  source    String   @default("manual") // verbal_optout | manual | import
+  note      String?
+}
+
+model Job {
+  id               String       @id @default(uuid())
+  savedPortfolioId String?
+  contactId        String?
+  phoneE164        String
+  callerProfileId  String?
+  trigger          String       @default("manual") // manual | cron | event
+  status           String       @default("queued") // queued | optimizing | pending_approval | gated | dialing | in_call | completed | voicemail | blocked | failed
+  blockReason      String?      // not_owned_number | no_consent | on_dnc | outside_calling_window | frequency_cap | policy_disabled | not_approved
+  policyId         String       @default("self")
+  packId           String?
+  complianceDir    String?
+  modeHint         String?      // summary | detail
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  portfolio        Portfolio?   @relation(fields: [savedPortfolioId], references: [id])
+  contact          Contact?     @relation(fields: [contactId], references: [id])
+  callerProfile    CallerProfile? @relation(fields: [callerProfileId], references: [id])
+  callRecords      CallRecord[]
+}
+
+model CallRecord {
+  id                   String    @id @default(uuid())
+  jobId                String
+  provider             String    @default("twilio") // twilio | mock
+  providerCallSid      String?
+  startedAt            DateTime?
+  endedAt              DateTime?
+  outcome              String?   // answered | voicemail | no_answer | failed | opted_out
+  modeChosen           String?   // summary | detail
+  recordingConsented   Boolean   @default(false)
+  transcriptUri        String?
+  disclosuresDelivered String?   // JSON array of delivered disclosure strings
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  job                  Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
