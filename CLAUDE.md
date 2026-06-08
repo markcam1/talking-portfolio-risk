@@ -30,7 +30,7 @@ An orchestrator + web control panel that runs the existing Portfolio Optimizer o
 - Keep `MOCK_MODE=true` and `MOCK_CALL_TARGET` pointed at the operator's phone for all self-call testing.
 
 ## Build order
-~~P1 optimizer hooks~~ ✅ → ~~P2 orchestrator core + registries + compliance dir + PDF archival~~ ✅ → ~~P3 policy framework + SelfCallPolicy + owned-numbers guard + audit~~ ✅ → **P4 call agent: `/api/talking-call/dispatch`, grounded prompt, disclosures, voicemail, transcript, opt-out** = **MVP** → P5 news lookup → P6 constrained rerun + `send_report` → P7 ManagedClientPolicy + hosted consent form (then consider enabling non-owned calls) → P8 maker-checker approval → P9 event-driven triggers → P10 inbound calls.
+~~P1 optimizer hooks~~ ✅ → ~~P2 orchestrator core + registries + compliance dir + PDF archival~~ ✅ → ~~P3 policy framework + SelfCallPolicy + owned-numbers guard + audit~~ ✅ → ~~P4 call agent: `/api/talking-call/dispatch`, grounded prompt, disclosures, voicemail, transcript, opt-out~~ ✅ = **MVP complete** → **P5 news lookup** → P6 constrained rerun + `send_report` → P7 ManagedClientPolicy + hosted consent form (then consider enabling non-owned calls) → P8 maker-checker approval → P9 event-driven triggers → P10 inbound calls.
 
 **Scaffold P8–P10 inertly during MVP** (see spec §6.5): the `pending_approval` state + `/api/jobs/:id/approve`, the `event` trigger interface + `noop` evaluator, and the inbound Twilio webhook/TwiML route — all behind flags (`APPROVAL_REQUIRED`, `EVENT_TRIGGERS_ENABLED`, `INBOUND_ENABLED`) defaulting **off**, so they don't affect MVP behavior.
 

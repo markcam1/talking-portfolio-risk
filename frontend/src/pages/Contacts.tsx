@@ -19,15 +19,24 @@ export default function Contacts() {
 
   useEffect(() => { load(); }, []);
 
+  const toE164 = (raw: string): string => {
+    const digits = raw.replace(/\D/g, '');
+    if (raw.startsWith('+')) return '+' + digits;
+    if (digits.length === 10) return '+1' + digits;          // US local
+    if (digits.length === 11 && digits.startsWith('1')) return '+' + digits;  // US with country code
+    return '+' + digits;
+  };
+
   const create = async () => {
     setError('');
     if (!name || !phone) { setError('Name and phone required'); return; }
+    const e164 = toE164(phone);
     const res = await fetch('/api/contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name,
-        phoneNumbers: [{ phone_e164: phone, label: 'mobile', is_primary: true, is_owned: true }],
+        phoneNumbers: [{ phone_e164: e164, label: 'mobile', is_primary: true, is_owned: true }],
         policyId: 'self',
       }),
     });
@@ -49,7 +58,7 @@ export default function Contacts() {
       <div className="bg-white rounded-lg border p-5 mb-6 max-w-lg">
         <h3 className="text-sm font-semibold mb-3">New Contact</h3>
         <input className="border rounded px-3 py-2 text-sm w-full mb-2" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
-        <input className="border rounded px-3 py-2 text-sm w-full mb-2" placeholder="Phone (E.164, e.g. +16462328797)" value={phone} onChange={e => setPhone(e.target.value)} />
+        <input className="border rounded px-3 py-2 text-sm w-full mb-2" placeholder="Phone (e.g. 2019234660 or +12019234660)" value={phone} onChange={e => setPhone(e.target.value)} />
         {error && <p className="text-red-500 text-xs mb-2">{error}</p>}
         <button onClick={create} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700">Create</button>
       </div>

@@ -73,36 +73,46 @@ async function runJob(job: FullJob, opts?: { resumeFromApproval?: boolean }): Pr
 
     await db.job.update({ where: { id: job.id }, data: { packId: run_id } });
 
-    // Step 3: Owned-numbers guard — runs before any policy, fails closed
-    const guardResult = await ownedNumbersGuard(job.phoneE164);
-    if (!guardResult.allow) {
-      await transition(job.id, 'blocked', { blockReason: guardResult.reason });
-      appendEvent(job.id, { type: 'gate_blocked', reason: guardResult.reason });
-      return;
-    }
-
-    // Step 4: Policy evaluate
-    const policy = policyRegistry.get(job.policyId);
-    const contact = job.contact ?? await db.contact.findUnique({ where: { id: job.contactId ?? '' } });
     const callerProfile = await resolveProfile(job);
-    const gateResult = await policy.evaluate({ job, contact, callerProfile, phone: job.phoneE164, now: new Date() });
+    let disclosures: Disclosures;
 
-    appendEvent(job.id, { type: 'gate_evaluated', allow: gateResult.allow, reason: gateResult.reason });
+    if (config.MOCK_MODE) {
+      // Skip all compliance gates in mock mode — no real recipient, no real call
+      appendEvent(job.id, { type: 'gate_skipped', reason: 'mock_mode' });
+      disclosures = buildMockDisclosures(job.phoneE164, callerProfile);
+    } else {
+      // Step 3: Owned-numbers guard — runs before any policy, fails closed
+      const guardResult = await ownedNumbersGuard(job.phoneE164);
+      if (!guardResult.allow) {
+        await transition(job.id, 'blocked', { blockReason: guardResult.reason });
+        appendEvent(job.id, { type: 'gate_blocked', reason: guardResult.reason });
+        return;
+      }
 
-    if (!gateResult.allow) {
-      await transition(job.id, 'blocked', { blockReason: gateResult.reason ?? 'policy_disabled' });
-      return;
-    }
+      // Step 4: Policy evaluate
+      const policy = policyRegistry.get(job.policyId);
+      const contact = job.contact ?? await db.contact.findUnique({ where: { id: job.contactId ?? '' } });
+      const gateResult = await policy.evaluate({ job, contact, callerProfile, phone: job.phoneE164, now: new Date() });
 
-    // Step 5: Maker-checker stub (Phase 8)
-    if (config.APPROVAL_REQUIRED) {
-      await transition(job.id, 'pending_approval');
-      return;
+      appendEvent(job.id, { type: 'gate_evaluated', allow: gateResult.allow, reason: gateResult.reason });
+
+      if (!gateResult.allow) {
+        await transition(job.id, 'blocked', { blockReason: gateResult.reason ?? 'policy_disabled' });
+        return;
+      }
+
+      // Step 5: Maker-checker stub (Phase 8)
+      if (config.APPROVAL_REQUIRED) {
+        await transition(job.id, 'pending_approval');
+        return;
+      }
+
+      disclosures = gateResult.disclosures;
     }
 
     await transition(job.id, 'gated');
     const packData = JSON.parse(fs.readFileSync(path.join(dir, 'report_pack.json'), 'utf8')) as Record<string, unknown>;
-    await dispatchCall(job, packData, gateResult.disclosures, callerProfile);
+    await dispatchCall(job, packData, disclosures, callerProfile);
   } else {
     // Resumed from approval
     await transition(job.id, 'gated');
@@ -168,6 +178,19 @@ async function dispatchCall(
 
   await transition(job.id, 'in_call');
   appendEvent(job.id, { type: 'dispatched', provider_call_sid: result.provider_call_sid });
+}
+
+function buildMockDisclosures(phone: string, profile: CallerProfile | null): Disclosures {
+  const entityName = profile?.entityName ?? config.DEFAULT_ENTITY_NAME;
+  const callbackNumber = profile?.callbackNumber ?? config.DEFAULT_CALLBACK_NUMBER;
+  return {
+    ai_identity: `I am an AI voice assistant calling on behalf of ${entityName}. I am not a human.`,
+    purpose: 'I am calling to discuss your portfolio optimization report.',
+    callback_number: callbackNumber,
+    financial_disclaimer: 'Educational use only. Not investment advice.',
+    recording_notice: 'This call may be recorded for quality and compliance purposes.',
+    require_recording_consent: false,
+  };
 }
 
 function buildAdminLog(job: FullJob, runId: string): string {

@@ -46,7 +46,7 @@ Three repos work together:
 | P1 | Optimizer headless mode + `/api/talking/run` + `/api/talking/pack` | ✅ Done |
 | P2 | Orchestrator scaffold — Express, Prisma, registries, compliance dir, web UI | ✅ Done |
 | P3 | Policy framework wired end-to-end, SelfCallPolicy + CallerProfile disclosures, owned-numbers guard, WS broadcasts | ✅ Done |
-| P4 | Call agent `/api/talking-call/dispatch`, grounded prompt, transcript relay | 🔧 Next |
+| P4 | Call agent `/api/talking-call/dispatch`, grounded prompt, transcript relay | ✅ Done |
 | P5 | News lookup (Brave) | Planned |
 | P6 | Constrained rerun + `send_report` delivery | Planned |
 | P7 | ManagedClientPolicy + hosted consent form | Planned |
@@ -241,6 +241,35 @@ OWNED_NUMBERS_ONLY guard (unconditional, fail-closed)
 ```
 
 The guard runs before any policy. Any error in the guard → **block** (fail closed). Non-owned number → `not_owned_number` block, no dispatch.
+
+---
+
+## Compliance Note — Test Environment Gate Suppression
+
+> **⚠ Non-Production Control: `MOCK_MODE=true`**
+
+When `MOCK_MODE=true`, the pre-call compliance gate pipeline is **suppressed in its entirety**:
+
+| Control | Production (`MOCK_MODE=false`) | Test (`MOCK_MODE=true`) |
+|---|---|---|
+| Owned-numbers guard | Enforced — fails closed | **Bypassed** |
+| DNC check | Enforced | **Bypassed** |
+| Consent verification | Enforced (ManagedClientPolicy) | **Bypassed** |
+| Calling-window check | Enforced | **Bypassed** |
+| Frequency cap | Enforced | **Bypassed** |
+| Compliance bundle (pack/PDF/audit log/manifest) | Written | **Still written** |
+| Audit event | `gate_evaluated` | `gate_skipped: mock_mode` |
+
+This follows standard non-production practice in regulated financial systems: recipient-protection controls are designed for real end-users and must not block developer test runs against operator-owned numbers. The report generation and compliance bundle are preserved because those artifacts have audit value independent of the call path.
+
+**Conditions required before disabling mock mode in any environment:**
+
+- [ ] `OWNED_NUMBERS_ONLY=true` confirmed in environment config
+- [ ] Phase 7 complete — `ManagedClientPolicy`, hosted consent form, and external counsel review
+- [ ] DNC seeding and calling-window configuration verified end-to-end
+- [ ] All test runs complete against owned numbers only
+
+> **Do not set `MOCK_MODE=false` in any environment that can reach a real Twilio account until the above checklist is satisfied.** The mock flag is an environment boundary, not a feature toggle.
 
 ---
 

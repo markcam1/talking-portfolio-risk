@@ -19,12 +19,20 @@ export default function OwnedNumbers() {
 
   useEffect(() => { load(); }, []);
 
+  const toE164 = (raw: string): string => {
+    const digits = raw.replace(/\D/g, '');
+    if (raw.startsWith('+')) return '+' + digits;
+    if (digits.length === 10) return '+1' + digits;
+    if (digits.length === 11 && digits.startsWith('1')) return '+' + digits;
+    return '+' + digits;
+  };
+
   const add = async () => {
     setError('');
     const res = await fetch('/api/owned-numbers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phoneE164: phone, label: label || undefined }),
+      body: JSON.stringify({ phoneE164: toE164(phone), label: label || undefined }),
     });
     if (!res.ok) { setError(await res.text()); return; }
     setPhone(''); setLabel('');
@@ -53,7 +61,7 @@ export default function OwnedNumbers() {
         <div className="flex gap-2 mb-2">
           <input
             className="border rounded px-3 py-2 text-sm flex-1"
-            placeholder="+16462328797"
+            placeholder="2019234660 or +12019234660"
             value={phone}
             onChange={e => setPhone(e.target.value)}
           />

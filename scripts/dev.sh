@@ -42,7 +42,7 @@ echo "==> Starting Portfolio Optimizer (headless :8077)…"
 (
   cd "$OPTIMIZER_DIR/backend"
   OPTIMIZER_HEADLESS=1 OPTIMIZER_HEADLESS_PORT=8077 \
-    nohup python -m uvicorn main:app --host 127.0.0.1 --port 8077 \
+    nohup "$OPTIMIZER_DIR/backend/venv/bin/python" -m uvicorn main:app --host 127.0.0.1 --port 8077 \
     > "$ROOT/logs/optimizer.log" 2>&1
 ) &
 echo $! >> "$ROOT/.dev/pids"
@@ -50,7 +50,7 @@ echo $! >> "$ROOT/.dev/pids"
 echo "==> Starting Call Agent (:3334)…"
 (
   cd "$CALLAGENT_DIR"
-  nohup npx ts-node --esm server.ts > "$ROOT/logs/callagent.log" 2>&1
+  nohup node --import tsx server.ts > "$ROOT/logs/callagent.log" 2>&1
 ) &
 echo $! >> "$ROOT/.dev/pids"
 

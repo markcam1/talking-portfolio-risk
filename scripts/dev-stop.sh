@@ -18,4 +18,9 @@ echo "==> Killing ngrok…"
 pkill -f "ngrok http" 2>/dev/null || true
 pkill -f "ngrok" 2>/dev/null || true
 
+echo "==> Clearing dev ports (5179 5180 3334 8077)…"
+for port in 5179 5180 3334 8077; do
+  lsof -ti ":$port" 2>/dev/null | xargs kill -9 2>/dev/null || true
+done
+
 echo "Done."

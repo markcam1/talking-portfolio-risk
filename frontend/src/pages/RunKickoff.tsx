@@ -32,6 +32,9 @@ export default function RunKickoff() {
       const def = ps.find(p => p.isDefault);
       if (def) setProfileId(def.id);
     }).catch(() => {});
+    fetch('/api/health').then(r => r.json()).then((h: { mockCallTarget?: string }) => {
+      if (h.mockCallTarget) setPhone(h.mockCallTarget);
+    }).catch(() => {});
   }, []);
 
   // When contact changes, auto-fill primary phone

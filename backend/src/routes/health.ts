@@ -22,5 +22,6 @@ healthRouter.get('/', async (_req, res) => {
     optimizer: optimizer ? 'ok' : 'unreachable',
     callAgent: callAgent ? 'ok' : 'unreachable',
     mockMode: config.MOCK_MODE,
+    mockCallTarget: config.MOCK_CALL_TARGET || config.DEFAULT_CALLBACK_NUMBER,
   });
 });
