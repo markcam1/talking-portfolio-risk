@@ -11,7 +11,7 @@ An orchestrator and web control panel that runs the Portfolio Optimizer on a sav
 ## Architecture
 
 ```
- manual / cron ──► Talking Portfolio (this repo)
+ manual / cron ──► Talking Portfolio (monorepo)
                    Web UI (React :5180) ──► Orchestrator (Node :5179)
                         │                          │
                   RecipientPolicy               compliance/<job_id>/
@@ -23,19 +23,21 @@ An orchestrator and web control panel that runs the Portfolio Optimizer on a sav
                                                 events.jsonl
                         │ HTTP                       │ HTTP
           ┌─────────────────────┐      ┌──────────────────────────┐
-          │  portfolio-optimizer │      │  autonomous-call-agent   │
+          │  optimizer/          │      │  call-agent/             │
           │  FastAPI :8077       │      │  Gemini Live + Twilio    │
           └─────────────────────┘      └──────────┬───────────────┘
                                          Your own (allowlisted) phone
 ```
 
-Three repos work together:
+All five services live in this repo:
 
-| Repo | Role | Port |
+| Directory | Role | Port |
 |---|---|---|
-| **this repo** | Orchestrator + web UI | :5179 / :5180 |
-| `portfolio-optimizer` | FastAPI + Riskfolio-Lib + Ollama | :8077 |
-| `voicecall-app` (autonomous-call-agent) | Gemini Live + Twilio voice | :3334 |
+| `backend/` | Orchestrator — Express, Prisma, policy framework, compliance bundle | :5179 |
+| `frontend/` | Web control panel — React | :5180 |
+| `optimizer/` | Portfolio Optimizer — FastAPI + Riskfolio-Lib | :8077 |
+| `optimizer-web/` | Optimizer standalone UI — React/Vite | :5181 |
+| `call-agent/` | Voice call agent — Node/TS + Twilio + Gemini Live | :3334 |
 
 ---
 
@@ -59,13 +61,10 @@ Three repos work together:
 ## Prerequisites
 
 - Node 20+
-- Python 3.10+ (for portfolio-optimizer)
+- Python 3.10+ (for `optimizer/`)
 - [ngrok](https://ngrok.com/) (free tier; a static domain avoids per-restart URL churn)
 - Twilio account with a phone number
 - Google Gemini API key
-- The two sibling repos cloned and configured:
-  - `portfolio-optimizer` at `/home/master/Software/portfolio_mngt/cc_riskfolio/portfolio-optimizer`
-  - `voicecall-app` at `/home/master/Software/openclaw/voicecall-app`
 
 ---
 
@@ -80,12 +79,17 @@ cp .env.example .env   # fill in your values (see below)
 
 cd backend && npm install && npm run db:migrate && cd ..
 cd frontend && npm install && cd ..
+cd call-agent && npm install && cd ..
+cd optimizer-web && npm install && cd ..
+
+# Create the optimizer Python venv
+cd optimizer && python3 -m venv venv && venv/bin/pip install -r requirements.txt && cd ..
 ```
 
 ### 2. Configure `.env`
 
 ```env
-# Points at the sibling services
+# Internal service URLs (all local)
 OPTIMIZER_BASE_URL=http://127.0.0.1:8077
 CALL_AGENT_BASE_URL=http://127.0.0.1:3334
 
@@ -104,7 +108,7 @@ SMTP_HOST=127.0.0.1
 SMTP_PORT=1025
 ```
 
-Secrets (Twilio, Gemini, Brave) live in the call agent's `.env` and are **never** stored here.
+Secrets (Twilio, Gemini, Brave) go in `call-agent/.env` and are **never** committed.
 
 ### 3. Start the full stack
 
@@ -113,17 +117,20 @@ scripts/dev.sh
 ```
 
 This starts everything in the background:
-1. **ngrok** on port 3334 → polls for the public URL → writes it into the call agent's `.env` as `PUBLIC_URL`
-2. **Portfolio Optimizer** headless (`OPTIMIZER_HEADLESS=1`) on :8077
-3. **Call Agent** on :3334
-4. **Orchestrator** on :5179
-5. **Web UI** on :5180
+1. **ngrok** on port 3334 → polls for the public URL → writes it into `call-agent/.env` as `PUBLIC_URL`
+2. **Portfolio Optimizer** (`optimizer/`) on :8077
+3. **Call Agent** (`call-agent/`) on :3334
+4. **Orchestrator** (`backend/`) on :5179
+5. **Web UI** (`frontend/`) on :5180
+6. **Optimizer Web** (`optimizer-web/`) on :5181
 
 URLs and health status are printed on completion. Logs go to `logs/<svc>.log` (rewritten on each restart).
 
 ```bash
-scripts/dev-stop.sh          # kill everything
-scripts/dev-logs.sh [svc]    # tail a log (optimizer|callagent|orchestrator|web)
+scripts/dev-stop.sh                    # kill everything
+scripts/dev-logs.sh [svc]             # tail a log (optimizer|callagent|orchestrator|web|optimizer-web)
+scripts/dev-clear-compliance.sh        # remove all dev compliance bundles
+scripts/dev-clear-compliance.sh <id>   # remove one job's bundle
 ```
 
 ### 4. Add your phone number
@@ -146,22 +153,24 @@ With `MOCK_MODE=true` the call agent dials `MOCK_CALL_TARGET` (your test phone) 
 talking-portfolio-risk/
 ├── backend/
 │   ├── prisma/
-│   │   ├── schema.prisma        # 8 models: Portfolio, Contact, Consent,
+│   │   ├── schema.prisma        # models: Portfolio, Contact, Consent,
 │   │   │                        #   CallerProfile, OwnedNumber, DncEntry,
-│   │   │                        #   Job, CallRecord
+│   │   │                        #   Job, CallRecord (all with tenantId)
 │   │   └── migrations/
 │   └── src/
 │       ├── config.ts            # env parsing + validation (Zod)
 │       ├── db.ts                # Prisma client singleton
 │       ├── server.ts            # Express app + WebSocket server
 │       ├── seed.ts              # seeds default CallerProfile on first boot
+│       ├── middleware/
+│       │   └── tenant.ts        # x-tenant-id → req.tenantId (default: "default")
 │       ├── routes/              # one file per API resource
 │       ├── services/
 │       │   ├── complianceDir.ts # writes/sha256s compliance bundle files
 │       │   ├── jobRunner.ts     # job state machine
 │       │   ├── optimizerClient.ts
 │       │   ├── callAgentClient.ts
-│       │   └── deliveryChannel.ts  # email stub (nodemailer/Mailpit)
+│       │   └── deliveryChannel.ts  # email (nodemailer/Mailpit)
 │       ├── policies/
 │       │   ├── types.ts         # RecipientPolicy interface
 │       │   ├── selfCallPolicy.ts
@@ -177,11 +186,31 @@ talking-portfolio-risk/
 │       └── pages/               # Dashboard, Portfolios, Contacts,
 │                                #   OwnedNumbers, CallerProfiles, RunKickoff,
 │                                #   Compliance, Settings
+├── optimizer/                   # FastAPI + Riskfolio-Lib (:8077)
+│   ├── main.py
+│   ├── server.py
+│   ├── routers/                 # optimize, runs, export, talking, tickers
+│   ├── services/                # data_fetcher, optimizer, pack_builder, pdf_generator
+│   ├── ai/                      # analyzer + streaming router
+│   ├── requirements.txt
+│   └── venv/                    # gitignored — create with: python3 -m venv venv
+├── optimizer-web/               # Optimizer standalone UI — React/Vite (:5181)
+│   └── src/
+│       ├── pages/               # Home, Upload, Configure, Results
+│       ├── components/          # charts, tables, upload, configure, ui
+│       ├── api/                 # typed client wrappers
+│       └── store/               # Zustand stores
+├── call-agent/                  # Gemini Live + Twilio voice (:3334)
+│   ├── server.ts
+│   ├── talking-dispatch.ts      # /api/talking-call/dispatch handler
+│   ├── talking-prompt.ts        # grounded system prompt builder
+│   ├── ai.ts                    # Gemini Live session
+│   └── twilio.ts                # TwiML + media stream
 ├── scripts/
-│   ├── dev.sh                   # start everything (ngrok + 4 services)
-│   ├── dev-stop.sh
-│   └── dev-logs.sh
-├── data/                        # gitignored — compliance/<job_id>/ lives here
+│   ├── dev.sh                   # start everything (ngrok + 5 services)
+│   ├── dev-stop.sh              # kill everything
+│   ├── dev-logs.sh              # tail a service log
+│   └── dev-clear-compliance.sh  # remove dev compliance bundles
 ├── logs/                        # gitignored — truncated on each restart
 ├── .env.example
 └── .env                         # gitignored — fill from .env.example
