@@ -12,8 +12,11 @@ const bodySchema = z.object({
   optimizerRunRef: z.string().optional(),
 });
 
-portfoliosRouter.get('/', async (_req, res) => {
-  const portfolios = await db.portfolio.findMany({ orderBy: { updatedAt: 'desc' } });
+portfoliosRouter.get('/', async (req, res) => {
+  const portfolios = await db.portfolio.findMany({
+    where: { tenantId: req.tenantId },
+    orderBy: { updatedAt: 'desc' },
+  });
   res.json(portfolios.map(p => ({
     ...p,
     tickers: JSON.parse(p.tickers),
@@ -23,7 +26,7 @@ portfoliosRouter.get('/', async (_req, res) => {
 });
 
 portfoliosRouter.get('/:id', async (req, res) => {
-  const p = await db.portfolio.findUnique({ where: { id: req.params.id } });
+  const p = await db.portfolio.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
   if (!p) { res.status(404).json({ error: 'Not found' }); return; }
   res.json({ ...p, tickers: JSON.parse(p.tickers), config: JSON.parse(p.config), dateRange: p.dateRange ? JSON.parse(p.dateRange) : null });
 });
@@ -35,6 +38,7 @@ portfoliosRouter.post('/', async (req, res) => {
   const p = await db.portfolio.create({
     data: {
       ...rest,
+      tenantId: req.tenantId,
       tickers: JSON.stringify(tickers),
       config: JSON.stringify(cfg),
       dateRange: dateRange ? JSON.stringify(dateRange) : JSON.stringify({}),
@@ -52,7 +56,7 @@ portfoliosRouter.put('/:id', async (req, res) => {
   if (cfg) updateData.config = JSON.stringify(cfg);
   if (dateRange) updateData.dateRange = JSON.stringify(dateRange);
   try {
-    const p = await db.portfolio.update({ where: { id: req.params.id }, data: updateData });
+    const p = await db.portfolio.update({ where: { id: req.params.id, tenantId: req.tenantId }, data: updateData });
     res.json(p);
   } catch {
     res.status(404).json({ error: 'Not found' });
@@ -61,7 +65,7 @@ portfoliosRouter.put('/:id', async (req, res) => {
 
 portfoliosRouter.delete('/:id', async (req, res) => {
   try {
-    await db.portfolio.delete({ where: { id: req.params.id } });
+    await db.portfolio.delete({ where: { id: req.params.id, tenantId: req.tenantId } });
     res.status(204).send();
   } catch {
     res.status(404).json({ error: 'Not found' });

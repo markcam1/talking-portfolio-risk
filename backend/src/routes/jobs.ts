@@ -18,8 +18,10 @@ const kickoffSchema = z.object({
 
 jobsRouter.get('/', async (req, res) => {
   const { status, limit = '50' } = req.query as Record<string, string>;
+  const where: Record<string, unknown> = { tenantId: req.tenantId };
+  if (status) where.status = status;
   const jobs = await db.job.findMany({
-    where: status ? { status } : undefined,
+    where,
     include: {
       portfolio: true,
       contact: true,
@@ -33,8 +35,8 @@ jobsRouter.get('/', async (req, res) => {
 });
 
 jobsRouter.get('/:id', async (req, res) => {
-  const job = await db.job.findUnique({
-    where: { id: req.params.id },
+  const job = await db.job.findFirst({
+    where: { id: req.params.id, tenantId: req.tenantId },
     include: { portfolio: true, contact: true, callerProfile: true, callRecords: true },
   });
   if (!job) { res.status(404).json({ error: 'Not found' }); return; }
@@ -45,15 +47,15 @@ jobsRouter.post('/', async (req, res) => {
   const parsed = kickoffSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.format() }); return; }
 
-  // Resolve default caller profile
+  // Resolve default caller profile scoped to this tenant
   let { callerProfileId } = parsed.data;
   if (!callerProfileId) {
-    const def = await db.callerProfile.findFirst({ where: { isDefault: true } });
+    const def = await db.callerProfile.findFirst({ where: { isDefault: true, tenantId: req.tenantId } });
     if (def) callerProfileId = def.id;
   }
 
   const job = await db.job.create({
-    data: { ...parsed.data, callerProfileId, status: 'queued' },
+    data: { ...parsed.data, tenantId: req.tenantId, callerProfileId, status: 'queued' },
   });
 
   // Fire and forget — runner transitions job through states
@@ -70,7 +72,7 @@ jobsRouter.post('/:id/approve', async (req, res) => {
     res.status(400).json({ error: 'APPROVAL_REQUIRED is not enabled' });
     return;
   }
-  const job = await db.job.findUnique({ where: { id: req.params.id } });
+  const job = await db.job.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
   if (!job) { res.status(404).json({ error: 'Not found' }); return; }
   if (job.status !== 'pending_approval') {
     res.status(400).json({ error: `Job is in status ${job.status}, not pending_approval` });

@@ -19,6 +19,7 @@ import { complianceRouter } from './routes/compliance.js';
 import { healthRouter } from './routes/health.js';
 import { handleJobSocket } from './ws/jobSocket.js';
 import { seedDefaults } from './seed.js';
+import { tenantMiddleware } from './middleware/tenant.js';
 
 // Ensure directories exist
 for (const dir of [DATA_DIR, LOG_DIR, COMPLIANCE_DIR]) {
@@ -29,6 +30,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(tenantMiddleware);
 
 // API routes
 app.use('/api/portfolios', portfoliosRouter);

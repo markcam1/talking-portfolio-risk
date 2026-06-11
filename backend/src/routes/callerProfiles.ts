@@ -12,13 +12,16 @@ const bodySchema = z.object({
   isDefault: z.boolean().default(false),
 });
 
-callerProfilesRouter.get('/', async (_req, res) => {
-  const profiles = await db.callerProfile.findMany({ orderBy: { createdAt: 'asc' } });
+callerProfilesRouter.get('/', async (req, res) => {
+  const profiles = await db.callerProfile.findMany({
+    where: { tenantId: req.tenantId },
+    orderBy: { createdAt: 'asc' },
+  });
   res.json(profiles);
 });
 
 callerProfilesRouter.get('/:id', async (req, res) => {
-  const p = await db.callerProfile.findUnique({ where: { id: req.params.id } });
+  const p = await db.callerProfile.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
   if (!p) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(p);
 });
@@ -27,9 +30,9 @@ callerProfilesRouter.post('/', async (req, res) => {
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.format() }); return; }
   if (parsed.data.isDefault) {
-    await db.callerProfile.updateMany({ data: { isDefault: false } });
+    await db.callerProfile.updateMany({ where: { tenantId: req.tenantId }, data: { isDefault: false } });
   }
-  const p = await db.callerProfile.create({ data: parsed.data });
+  const p = await db.callerProfile.create({ data: { ...parsed.data, tenantId: req.tenantId } });
   res.status(201).json(p);
 });
 
@@ -37,10 +40,10 @@ callerProfilesRouter.put('/:id', async (req, res) => {
   const parsed = bodySchema.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.format() }); return; }
   if (parsed.data.isDefault) {
-    await db.callerProfile.updateMany({ where: { id: { not: req.params.id } }, data: { isDefault: false } });
+    await db.callerProfile.updateMany({ where: { id: { not: req.params.id }, tenantId: req.tenantId }, data: { isDefault: false } });
   }
   try {
-    const p = await db.callerProfile.update({ where: { id: req.params.id }, data: parsed.data });
+    const p = await db.callerProfile.update({ where: { id: req.params.id, tenantId: req.tenantId }, data: parsed.data });
     res.json(p);
   } catch {
     res.status(404).json({ error: 'Not found' });
@@ -49,7 +52,7 @@ callerProfilesRouter.put('/:id', async (req, res) => {
 
 callerProfilesRouter.delete('/:id', async (req, res) => {
   try {
-    await db.callerProfile.delete({ where: { id: req.params.id } });
+    await db.callerProfile.delete({ where: { id: req.params.id, tenantId: req.tenantId } });
     res.status(204).send();
   } catch {
     res.status(404).json({ error: 'Not found' });

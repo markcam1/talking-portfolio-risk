@@ -10,8 +10,11 @@ const bodySchema = z.object({
   note: z.string().optional(),
 });
 
-dncRouter.get('/', async (_req, res) => {
-  const entries = await db.dncEntry.findMany({ orderBy: { addedAt: 'desc' } });
+dncRouter.get('/', async (req, res) => {
+  const entries = await db.dncEntry.findMany({
+    where: { tenantId: req.tenantId },
+    orderBy: { addedAt: 'desc' },
+  });
   res.json(entries);
 });
 
@@ -19,7 +22,7 @@ dncRouter.post('/', async (req, res) => {
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.format() }); return; }
   try {
-    const entry = await db.dncEntry.create({ data: parsed.data });
+    const entry = await db.dncEntry.create({ data: { ...parsed.data, tenantId: req.tenantId } });
     res.status(201).json(entry);
   } catch {
     res.status(409).json({ error: 'Number already on DNC list' });
@@ -28,7 +31,7 @@ dncRouter.post('/', async (req, res) => {
 
 dncRouter.delete('/:id', async (req, res) => {
   try {
-    await db.dncEntry.delete({ where: { id: req.params.id } });
+    await db.dncEntry.delete({ where: { id: req.params.id, tenantId: req.tenantId } });
     res.status(204).send();
   } catch {
     res.status(404).json({ error: 'Not found' });

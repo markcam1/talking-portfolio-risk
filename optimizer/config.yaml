@@ -1,0 +1,15 @@
+ollama:
+  base_url: http://127.0.0.1:11434
+
+  # Set to true to show a model picker in the AI Analysis panel.
+  # When false, only the first active model below is used (no dropdown shown).
+  allow_frontend_switch: true
+
+  # List the models you want available. Comment a line out to disable it.
+  # The first uncommented model is used as the default.
+  models:
+    - llama3.1:8b-instruct-q8_0   # current default
+    - qwen2-math:7b-instruct-q8_0 # added May 26
+    - deepseek-r1:14b-qwen-distill-q4_K_M # added May 26
+    # - llama3.2:latest            # lighter / faster
+    # - mistral:latest             # alternative

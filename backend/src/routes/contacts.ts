@@ -29,8 +29,9 @@ const consentSchema = z.object({
   recordingConsent: z.enum(['granted', 'denied', 'unknown']).default('unknown'),
 });
 
-contactsRouter.get('/', async (_req, res) => {
+contactsRouter.get('/', async (req, res) => {
   const contacts = await db.contact.findMany({
+    where: { tenantId: req.tenantId },
     include: { consents: true },
     orderBy: { updatedAt: 'desc' },
   });
@@ -38,7 +39,7 @@ contactsRouter.get('/', async (_req, res) => {
 });
 
 contactsRouter.get('/:id', async (req, res) => {
-  const c = await db.contact.findUnique({ where: { id: req.params.id }, include: { consents: true } });
+  const c = await db.contact.findFirst({ where: { id: req.params.id, tenantId: req.tenantId }, include: { consents: true } });
   if (!c) { res.status(404).json({ error: 'Not found' }); return; }
   res.json({ ...c, phoneNumbers: JSON.parse(c.phoneNumbers) });
 });
@@ -47,7 +48,7 @@ contactsRouter.post('/', async (req, res) => {
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.format() }); return; }
   const { phoneNumbers, ...rest } = parsed.data;
-  const c = await db.contact.create({ data: { ...rest, phoneNumbers: JSON.stringify(phoneNumbers) } });
+  const c = await db.contact.create({ data: { ...rest, tenantId: req.tenantId, phoneNumbers: JSON.stringify(phoneNumbers) } });
   res.status(201).json({ ...c, phoneNumbers });
 });
 
@@ -58,7 +59,7 @@ contactsRouter.put('/:id', async (req, res) => {
   const updateData: Record<string, unknown> = { ...rest };
   if (phoneNumbers) updateData.phoneNumbers = JSON.stringify(phoneNumbers);
   try {
-    const c = await db.contact.update({ where: { id: req.params.id }, data: updateData });
+    const c = await db.contact.update({ where: { id: req.params.id, tenantId: req.tenantId }, data: updateData });
     res.json({ ...c, phoneNumbers: JSON.parse(c.phoneNumbers) });
   } catch {
     res.status(404).json({ error: 'Not found' });
@@ -67,7 +68,7 @@ contactsRouter.put('/:id', async (req, res) => {
 
 contactsRouter.delete('/:id', async (req, res) => {
   try {
-    await db.contact.delete({ where: { id: req.params.id } });
+    await db.contact.delete({ where: { id: req.params.id, tenantId: req.tenantId } });
     res.status(204).send();
   } catch {
     res.status(404).json({ error: 'Not found' });
@@ -78,11 +79,12 @@ contactsRouter.delete('/:id', async (req, res) => {
 contactsRouter.post('/:id/consent', async (req, res) => {
   const parsed = consentSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.format() }); return; }
-  const contact = await db.contact.findUnique({ where: { id: req.params.id } });
+  const contact = await db.contact.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
   if (!contact) { res.status(404).json({ error: 'Contact not found' }); return; }
   const consent = await db.consent.create({
     data: {
       ...parsed.data,
+      tenantId: req.tenantId,
       contactId: req.params.id,
       grantedAt: parsed.data.grantedAt ? new Date(parsed.data.grantedAt) : null,
       expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,

@@ -9,6 +9,7 @@ datasource db {
 
 model Portfolio {
   id               String   @id @default(uuid())
+  tenantId         String   @default("default")
   name             String
   tickers          String   // JSON array of ticker strings
   config           String   // JSON optimization config
@@ -21,6 +22,7 @@ model Portfolio {
 
 model Contact {
   id           String    @id @default(uuid())
+  tenantId     String    @default("default")
   name         String
   phoneNumbers String    // JSON array of { phone_e164, label, is_primary, is_owned }
   timezone     String    @default("America/New_York")
@@ -33,6 +35,7 @@ model Contact {
 
 model Consent {
   id                String   @id @default(uuid())
+  tenantId          String   @default("default")
   contactId         String
   status            String   @default("none") // granted | revoked | none
   method            String   @default("self_owned") // self_owned | web_form | recorded_verbal | written | imported
@@ -49,6 +52,7 @@ model Consent {
 
 model CallerProfile {
   id                  String   @id @default(uuid())
+  tenantId            String   @default("default")
   entityName          String
   callbackNumber      String
   voicePersona        String?
@@ -61,6 +65,7 @@ model CallerProfile {
 
 model OwnedNumber {
   id                 String    @id @default(uuid())
+  tenantId           String    @default("default")
   phoneE164          String    @unique
   label              String?
   verified           Boolean   @default(false)
@@ -73,6 +78,7 @@ model OwnedNumber {
 
 model DncEntry {
   id        String   @id @default(uuid())
+  tenantId  String   @default("default")
   phoneE164 String   @unique
   addedAt   DateTime @default(now())
   source    String   @default("manual") // verbal_optout | manual | import
@@ -81,6 +87,7 @@ model DncEntry {
 
 model Job {
   id               String       @id @default(uuid())
+  tenantId         String       @default("default")
   savedPortfolioId String?
   contactId        String?
   phoneE164        String
@@ -102,6 +109,7 @@ model Job {
 
 model CallRecord {
   id                   String    @id @default(uuid())
+  tenantId             String    @default("default")
   jobId                String
   provider             String    @default("twilio") // twilio | mock
   providerCallSid      String?

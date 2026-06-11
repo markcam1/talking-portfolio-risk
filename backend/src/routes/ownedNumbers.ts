@@ -9,8 +9,11 @@ const bodySchema = z.object({
   label: z.string().optional(),
 });
 
-ownedNumbersRouter.get('/', async (_req, res) => {
-  const numbers = await db.ownedNumber.findMany({ orderBy: { createdAt: 'asc' } });
+ownedNumbersRouter.get('/', async (req, res) => {
+  const numbers = await db.ownedNumber.findMany({
+    where: { tenantId: req.tenantId },
+    orderBy: { createdAt: 'asc' },
+  });
   res.json(numbers);
 });
 
@@ -18,7 +21,7 @@ ownedNumbersRouter.post('/', async (req, res) => {
   const parsed = bodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.format() }); return; }
   try {
-    const n = await db.ownedNumber.create({ data: parsed.data });
+    const n = await db.ownedNumber.create({ data: { ...parsed.data, tenantId: req.tenantId } });
     res.status(201).json(n);
   } catch {
     res.status(409).json({ error: 'Number already registered' });
@@ -29,7 +32,7 @@ ownedNumbersRouter.post('/', async (req, res) => {
 ownedNumbersRouter.post('/:id/confirm', async (req, res) => {
   try {
     const n = await db.ownedNumber.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id, tenantId: req.tenantId },
       data: { verified: true, verifiedAt: new Date(), verificationMethod: 'manual_confirm' },
     });
     res.json(n);
@@ -40,7 +43,7 @@ ownedNumbersRouter.post('/:id/confirm', async (req, res) => {
 
 ownedNumbersRouter.delete('/:id', async (req, res) => {
   try {
-    await db.ownedNumber.delete({ where: { id: req.params.id } });
+    await db.ownedNumber.delete({ where: { id: req.params.id, tenantId: req.tenantId } });
     res.status(204).send();
   } catch {
     res.status(404).json({ error: 'Not found' });
