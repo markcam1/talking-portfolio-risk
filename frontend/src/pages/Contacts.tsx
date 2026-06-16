@@ -58,7 +58,7 @@ export default function Contacts() {
       <div className="bg-white rounded-lg border p-5 mb-6 max-w-lg">
         <h3 className="text-sm font-semibold mb-3">New Contact</h3>
         <input className="border rounded px-3 py-2 text-sm w-full mb-2" placeholder="Name" value={name} onChange={e => setName(e.target.value)} />
-        <input className="border rounded px-3 py-2 text-sm w-full mb-2" placeholder="Phone (e.g. 2019234660 or +12019234660)" value={phone} onChange={e => setPhone(e.target.value)} />
+        <input className="border rounded px-3 py-2 text-sm w-full mb-2" placeholder="Phone (e.g. 2015550123 or +12015550123)" value={phone} onChange={e => setPhone(e.target.value)} />
         {error && <p className="text-red-500 text-xs mb-2">{error}</p>}
         <button onClick={create} className="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700">Create</button>
       </div>

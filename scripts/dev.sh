@@ -57,7 +57,9 @@ echo $! >> "$ROOT/.dev/pids"
 echo "==> Starting Call Agent (:3334)…"
 (
   cd "$CALLAGENT_DIR"
-  nohup node --import tsx server.ts > "$ROOT/logs/callagent.log" 2>&1
+  # Root .env's PORT (orchestrator's 5179) is exported into this shell above;
+  # override it here so call-agent doesn't inherit the wrong port.
+  PORT=3334 nohup node --import tsx server.ts > "$ROOT/logs/callagent.log" 2>&1
 ) &
 echo $! >> "$ROOT/.dev/pids"
 

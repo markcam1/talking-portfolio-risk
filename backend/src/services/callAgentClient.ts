@@ -38,8 +38,10 @@ export async function dispatch(payload: DispatchPayload): Promise<DispatchResult
   return res.json() as Promise<DispatchResult>;
 }
 
-// In-memory transcript buffer keyed by jobId
-const transcriptBuffers = new Map<string, string[]>();
+// In-memory transcript buffer keyed by jobId. Gemini Live streams transcription
+// as many small text deltas per utterance, so consecutive same-role deltas are
+// merged into one entry rather than kept as separate lines.
+const transcriptBuffers = new Map<string, { role: string; text: string }[]>();
 
 export async function handleCallWebhook(body: Record<string, unknown>): Promise<void> {
   const { event, call_id } = body as { event: string; call_id: string };
@@ -54,11 +56,17 @@ export async function handleCallWebhook(body: Record<string, unknown>): Promise<
   if (event === 'transcript') {
     const { role, text } = body as { role: string; text: string };
     const buf = transcriptBuffers.get(job.id) ?? [];
-    buf.push(`[${role}] ${text}`);
+    const last = buf[buf.length - 1];
+    if (last && last.role === role) {
+      last.text += text;
+    } else {
+      buf.push({ role, text });
+    }
     transcriptBuffers.set(job.id, buf);
 
-    // Relay to WebSocket clients
-    broadcastToJob(job.id, { event: 'transcript', role, text });
+    // Relay to WebSocket clients; append signals a delta for the current line
+    // vs. the start of a new line, so the UI can merge consecutive chunks.
+    broadcastToJob(job.id, { event: 'transcript', role, text, append: !!last && last.role === role });
     return;
   }
 
@@ -82,7 +90,8 @@ export async function handleCallWebhook(body: Record<string, unknown>): Promise<
     if (callRecord.recordingConsented && job.complianceDir) {
       const lines = transcriptBuffers.get(job.id) ?? [];
       if (lines.length > 0) {
-        const transcriptPath = writeFile(job.id, 'transcript.txt', lines.join('\n'));
+        const transcriptText = lines.map(l => `[${l.role}] ${l.text}`).join('\n');
+        const transcriptPath = writeFile(job.id, 'transcript.txt', transcriptText);
         await db.callRecord.update({ where: { id: call_id }, data: { transcriptUri: transcriptPath } });
       }
     }

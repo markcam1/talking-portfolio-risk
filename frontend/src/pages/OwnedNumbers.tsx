@@ -61,7 +61,7 @@ export default function OwnedNumbers() {
         <div className="flex gap-2 mb-2">
           <input
             className="border rounded px-3 py-2 text-sm flex-1"
-            placeholder="2019234660 or +12019234660"
+            placeholder="2015550123 or +12015550123"
             value={phone}
             onChange={e => setPhone(e.target.value)}
           />

@@ -71,7 +71,13 @@ export default function RunKickoff() {
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.event === 'transcript') {
-        setTranscript(prev => [...prev, { role: msg.role, text: msg.text }]);
+        setTranscript(prev => {
+          const last = prev[prev.length - 1];
+          if (msg.append && last && last.role === msg.role) {
+            return [...prev.slice(0, -1), { role: last.role, text: last.text + msg.text }];
+          }
+          return [...prev, { role: msg.role, text: msg.text }];
+        });
       } else if (msg.event === 'status') {
         setStatus(msg.status ?? '');
         if (msg.status === 'blocked') setBlockReason(msg.reason ?? '');
@@ -94,10 +100,10 @@ export default function RunKickoff() {
   };
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-8">
       <h2 className="text-2xl font-bold mb-6">Run Talking Portfolio</h2>
 
-      <div className="bg-white rounded-lg border p-6 mb-6 space-y-4">
+      <div className="bg-white rounded-lg border p-6 mb-6 space-y-4 max-w-2xl">
         <div>
           <label className="text-xs text-gray-500 block mb-1">Portfolio (leave blank for last run)</label>
           <select className="border rounded px-3 py-2 text-sm w-full" value={portfolioId} onChange={e => setPortfolioId(e.target.value)}>
@@ -154,7 +160,7 @@ export default function RunKickoff() {
 
       {/* Live transcript */}
       {(jobId || transcript.length > 0) && (
-        <div className="bg-white rounded-lg border p-4">
+        <div className="bg-white rounded-lg border p-4 max-w-4xl">
           <h3 className="text-sm font-semibold mb-3">Live Transcript</h3>
           {transcript.length === 0 && <p className="text-gray-400 text-sm">Waiting for call…</p>}
           <div className="space-y-2 max-h-80 overflow-y-auto">
