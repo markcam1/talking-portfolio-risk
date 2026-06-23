@@ -48,7 +48,7 @@ All five services live in this repo:
 | P1 | Optimizer headless mode + `/api/talking/run` + `/api/talking/pack` | ✅ Done |
 | P2 | Orchestrator scaffold — Express, Prisma, registries, compliance dir, web UI | ✅ Done |
 | P3 | Policy framework wired end-to-end, SelfCallPolicy + CallerProfile disclosures, owned-numbers guard, WS broadcasts | ✅ Done |
-| P4 | Call agent `/api/talking-call/dispatch`, grounded prompt, transcript relay | ✅ Done |
+| P4 | Call agent `/api/talking-call/dispatch`, grounded prompt, transcript relay, turn-taking (silence watchdog, interrupt handling, tool-paced fact delivery) | ✅ Done |
 | P5 | News lookup (Brave) | Planned |
 | P6 | Constrained rerun + `send_report` delivery | Planned |
 | P7 | ManagedClientPolicy + hosted consent form | Planned |
@@ -201,10 +201,11 @@ talking-portfolio-risk/
 │       ├── api/                 # typed client wrappers
 │       └── store/               # Zustand stores
 ├── call-agent/                  # Gemini Live + Twilio voice (:3334)
-│   ├── server.ts
+│   ├── server.ts                # media stream relay, silence watchdog, tool-call routing
 │   ├── talking-dispatch.ts      # /api/talking-call/dispatch handler
 │   ├── talking-prompt.ts        # grounded system prompt builder
-│   ├── ai.ts                    # Gemini Live session
+│   ├── report-facts.ts          # deterministic fact extraction (summary/detail) for paced delivery
+│   ├── ai.ts                    # Gemini Live session (turn-taking, tool calls)
 │   └── twilio.ts                # TwiML + media stream
 ├── scripts/
 │   ├── dev.sh                   # start everything (ngrok + 5 services)

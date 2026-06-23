@@ -11,9 +11,12 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
  * It manages the persistent WebSocket connection to Google's servers.
  */
 export function createGeminiLiveSession(
-  context: string, 
+  context: string,
   onAudioData: (base64Audio: string) => void,
-  onTranscript: (role: 'model' | 'user', text: string) => void
+  onTranscript: (role: 'model' | 'user', text: string) => void,
+  onTurnComplete?: () => void,
+  onInterrupted?: () => void,
+  onToolCall?: (name: string, args: Record<string, unknown>, id: string) => void
 ) {
   const model = "gemini-3.1-flash-live-preview"; 
   
@@ -44,6 +47,24 @@ export function createGeminiLiveSession(
         system_instruction: {
           parts: [{ text: context }]
         },
+        tools: [{
+          function_declarations: [
+            {
+              name: 'set_mode',
+              description: "Call this once you've learned whether the recipient wants a brief summary or a detailed walkthrough.",
+              parameters: {
+                type: 'OBJECT',
+                properties: { mode: { type: 'STRING', enum: ['summary', 'detail'] } },
+                required: ['mode']
+              }
+            },
+            {
+              name: 'next_fact',
+              description: 'Call this when you are ready to deliver the next single fact from the portfolio report to the recipient.',
+              parameters: { type: 'OBJECT', properties: {} }
+            }
+          ]
+        }],
         // Transcription fields (might still be unsupported in 3.1)
         output_audio_transcription: {},
         input_audio_transcription: {}
@@ -114,6 +135,21 @@ export function createGeminiLiveSession(
       
       if (serverContent?.interrupted) {
         console.log('Gemini interrupted');
+        onInterrupted?.();
+      }
+
+      const turnComplete = serverContent?.turn_complete ?? serverContent?.turnComplete;
+      if (turnComplete) {
+        onTurnComplete?.();
+      }
+
+      const toolCall = response.tool_call ?? response.toolCall;
+      const functionCalls = toolCall?.function_calls ?? toolCall?.functionCalls;
+      if (Array.isArray(functionCalls)) {
+        for (const fc of functionCalls) {
+          console.log('Gemini tool call:', JSON.stringify(fc));
+          onToolCall?.(fc.name, fc.args ?? {}, fc.id);
+        }
       }
     } catch (err) {
       console.error('Error parsing Gemini message:', err);
@@ -130,6 +166,30 @@ export function createGeminiLiveSession(
         }
       }
     }));
+  }
+
+  // Injects a text-only control turn (e.g. a silence nudge) so the model speaks
+  // again without needing real user audio to trigger a turn.
+  function sendSystemNote(text: string) {
+    if (geminiWs.readyState === WebSocket.OPEN) {
+      geminiWs.send(JSON.stringify({
+        client_content: {
+          turns: [{ role: 'user', parts: [{ text }] }],
+          turn_complete: true
+        }
+      }));
+    }
+  }
+
+  // Resolves a pending function call so the model can continue past the tool gate.
+  function sendToolResponse(id: string, response: Record<string, unknown>) {
+    if (geminiWs.readyState === WebSocket.OPEN) {
+      geminiWs.send(JSON.stringify({
+        tool_response: {
+          function_responses: [{ id, response }]
+        }
+      }));
+    }
   }
 
   let outboundCount = 0;
@@ -156,6 +216,8 @@ export function createGeminiLiveSession(
         sendToGemini(base64Pcm16k);
       }
     },
+    sendSystemNote,
+    sendToolResponse,
     close: () => geminiWs.close()
   };
 }

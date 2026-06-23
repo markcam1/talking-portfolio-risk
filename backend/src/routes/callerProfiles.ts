@@ -7,7 +7,7 @@ export const callerProfilesRouter = Router();
 const bodySchema = z.object({
   entityName: z.string().min(1),
   callbackNumber: z.string().regex(/^\+[1-9]\d{7,14}$/, 'Must be E.164 format'),
-  voicePersona: z.string().optional(),
+  voicePersona: z.string().nullable().optional(),
   financialDisclaimer: z.string().default('Educational use only. Not investment advice.'),
   isDefault: z.boolean().default(false),
 });

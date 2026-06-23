@@ -89,12 +89,65 @@ if (process.env.INBOUND_ENABLED === 'true') {
   });
 }
 
+const SILENCE_NUDGE_MS = 6000;
+const MAX_SILENCE_NUDGES = 2;
+
 wss.on('connection', (ws) => {
   console.log('[call-agent] Twilio media stream connected');
   let callSid: string | null = null;
   let streamSid: string | null = null;
   let geminiSession: any = null;
   let mediaCount = 0;
+
+  // Opening-greeting silence handling: the model only speaks when it gets a
+  // turn, so if the recipient never responds we have to nudge it ourselves.
+  let hasUserSpoken = false;
+  let lastModelTurnCompleteAt: number | null = null;
+  let silenceNudgeCount = 0;
+  let silenceCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Report walkthrough pacing: facts are pre-chunked in code (report-facts.ts)
+  // and handed to the model one at a time via tool calls, instead of trusting
+  // it to ration a free-text "deliver the analysis" instruction.
+  let walkthroughFacts: string[] = [];
+  let factIndex = 0;
+
+  const stopSilenceWatch = () => {
+    if (silenceCheckInterval) {
+      clearInterval(silenceCheckInterval);
+      silenceCheckInterval = null;
+    }
+  };
+
+  const checkSilence = () => {
+    if (hasUserSpoken || !geminiSession || lastModelTurnCompleteAt === null) {
+      stopSilenceWatch();
+      return;
+    }
+    if (Date.now() - lastModelTurnCompleteAt < SILENCE_NUDGE_MS) return;
+
+    silenceNudgeCount++;
+    if (silenceNudgeCount > MAX_SILENCE_NUDGES) {
+      geminiSession.sendSystemNote(
+        '[SYSTEM NOTE: No response after several attempts. Say a brief goodbye and end the call.]'
+      );
+      lastModelTurnCompleteAt = null;
+      stopSilenceWatch();
+      const sidToHangUp = callSid;
+      setTimeout(() => {
+        if (sidToHangUp) {
+          twilioClient.hangupCall(sidToHangUp).catch((err) =>
+            console.error('[call-agent] hangup after silence failed:', err.message)
+          );
+        }
+      }, 5000);
+    } else {
+      geminiSession.sendSystemNote(
+        '[SYSTEM NOTE: Several seconds of silence — no response heard. Say a brief "Hello, are you there?" and wait again.]'
+      );
+      lastModelTurnCompleteAt = Date.now();
+    }
+  };
 
   ws.on('message', async (message) => {
     const data = JSON.parse(message.toString());
@@ -109,6 +162,13 @@ wss.on('connection', (ws) => {
 
         const context = callContexts.get(callSid!) || 'You are a helpful assistant.';
 
+        // Default to the dispatch-time mode hint's facts until the model
+        // calls set_mode with what the recipient actually chose.
+        const initialMeta = talkingMeta.get(callSid!);
+        if (initialMeta) {
+          walkthroughFacts = initialMeta.report_facts[initialMeta.mode_hint] ?? [];
+        }
+
         geminiSession = createGeminiLiveSession(
           context,
           (base64Audio) => {
@@ -121,6 +181,11 @@ wss.on('connection', (ws) => {
             }
           },
           (role, text) => {
+            if (role === 'user') {
+              hasUserSpoken = true;
+              stopSilenceWatch();
+            }
+
             const transcript = transcripts.get(callSid!) || [];
             transcript.push({ role, text });
             transcripts.set(callSid!, transcript);
@@ -142,6 +207,45 @@ wss.on('connection', (ws) => {
                 });
               }
             }
+          },
+          () => {
+            if (hasUserSpoken) return;
+            lastModelTurnCompleteAt = Date.now();
+            if (!silenceCheckInterval) {
+              silenceCheckInterval = setInterval(checkSilence, 1000);
+            }
+          },
+          () => {
+            // Gemini canceled its in-flight turn because the user started talking,
+            // but any audio already sent to Twilio is still queued for playback —
+            // tell Twilio to drop it so the user is actually heard over the agent.
+            if (ws.readyState === ws.OPEN && streamSid) {
+              ws.send(JSON.stringify({ event: 'clear', streamSid }));
+            }
+          },
+          (name, args, id) => {
+            const tMeta = talkingMeta.get(callSid!);
+
+            if (name === 'set_mode') {
+              const mode = args.mode === 'detail' ? 'detail' : 'summary';
+              factIndex = 0;
+              walkthroughFacts = tMeta?.report_facts[mode] ?? [];
+              if (tMeta) tMeta.mode_hint = mode; // reflect the real choice for the status webhook
+              geminiSession.sendToolResponse(id, { ok: true });
+              return;
+            }
+
+            if (name === 'next_fact') {
+              if (factIndex >= walkthroughFacts.length) {
+                geminiSession.sendToolResponse(id, { done: true });
+                return;
+              }
+              const text = walkthroughFacts[factIndex];
+              const isLast = factIndex === walkthroughFacts.length - 1;
+              factIndex++;
+              geminiSession.sendToolResponse(id, { text, is_last: isLast });
+              return;
+            }
           }
         );
         break;
@@ -157,12 +261,14 @@ wss.on('connection', (ws) => {
       case 'stop':
         console.log(`[call-agent] stream stopped callSid=${callSid}`);
         broadcastToFrontend({ event: 'status', callSid, status: 'stopped' });
+        stopSilenceWatch();
         if (geminiSession) geminiSession.close();
         break;
     }
   });
 
   ws.on('close', () => {
+    stopSilenceWatch();
     if (geminiSession) geminiSession.close();
   });
 });

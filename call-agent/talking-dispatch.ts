@@ -2,6 +2,7 @@ import { Router } from 'express';
 import twilio from 'twilio';
 import { TwilioClient } from './twilio.js';
 import { buildGroundedPrompt, type DispatchDisclosures } from './talking-prompt.js';
+import { buildReportFacts, type ReportFacts } from './report-facts.js';
 
 const router = Router();
 export { router as talkingDispatchRouter };
@@ -21,6 +22,7 @@ interface TalkingCallMeta {
   status_webhook: string;
   voicemail_script: string;
   mode_hint: 'summary' | 'detail';
+  report_facts: ReportFacts;
 }
 
 // Keyed by Twilio CallSid — shared with server.ts via the export
@@ -67,12 +69,14 @@ router.post('/api/talking-call/dispatch', async (req, res) => {
 
   const modeHintVal: 'summary' | 'detail' = mode_hint === 'detail' ? 'detail' : 'summary';
   const prompt = buildGroundedPrompt(report_pack, disclosures, modeHintVal);
+  const reportFacts = buildReportFacts(report_pack);
 
   const meta: TalkingCallMeta = {
     call_id,
     status_webhook,
     voicemail_script: voicemail_script ?? '',
     mode_hint: modeHintVal,
+    report_facts: reportFacts,
   };
   pendingPrompts.set(call_id, { prompt, meta });
 

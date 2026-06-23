@@ -19,6 +19,10 @@ export class TwilioClient {
     });
   }
 
+  async hangupCall(callSid: string) {
+    return this.client.calls(callSid).update({ status: 'completed' });
+  }
+
   getStreamConnectXml(streamUrl: string) {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
